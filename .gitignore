@@ -1,0 +1,11 @@
+# Local tooling
+recommander_system/anaconda_projects/
+backend/recommander_system/anaconda_projects/
+__pycache__/
+.ipynb_checkpoints/
+
+# Never publish generated account passwords
+backend/storage/app/private/*.csv
+
+# Environment
+.env
