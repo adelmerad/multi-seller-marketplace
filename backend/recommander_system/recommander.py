@@ -32,7 +32,9 @@ threading.Thread(target=periodic_trigger, daemon=True).start()
 
 # data preprocessing fase :
 product_dataset = pd.read_csv('../storage/app/products.csv')
-product_dataset["tags"]=product_dataset["about"]+product_dataset["category_name"]
+# keep a space between the description and the category, otherwise the last word
+# of the description and the first word of the category are glued together
+product_dataset["tags"]=product_dataset["about"].fillna("")+" "+product_dataset["category_name"].fillna("")
 product_dataset=product_dataset.drop(columns=["about","category_name"])
 
 # learning the dataset to make predictions:
@@ -153,7 +155,7 @@ def recommend_products_for_users(user_id):
              product_info = filtered_ratings[filtered_ratings['Product ID'] == product_id]
              if not product_info.empty:
                 recommended_products.append({
-                    "id": product_id,
+                    "id": int(product_id),
                     "name": product_info.iloc[0]['Product Name']
                 })
 
@@ -198,9 +200,11 @@ def popular_products():
     # Create a list of recommended product info
     recommended_products = []
 
-    for product_id, row in top_products.iterrows():
+    # after reset_index() the DataFrame index is a row position, not a product id:
+    # read the id from the "Product ID" column
+    for _, row in top_products.iterrows():
         recommended_products.append({
-            "id": product_id,
+            "id": int(row['Product ID']),
             "name": row['Product Name'],
         })
 
