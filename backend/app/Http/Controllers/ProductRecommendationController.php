@@ -4,72 +4,46 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\ProductResource;
 use App\Models\Product;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Symfony\Component\Process\Process;
-use Symfony\Component\Process\Exception\ProcessFailedException;
 
 class ProductRecommendationController extends Controller
 {
+    private const RECOMMENDER_URL = 'http://127.0.0.1:5000';
+
     public function getRecommendations_content($productID)
     {
-        $url = "http://127.0.0.1:5000/recommend_content/" . rawurlencode($productID);
-
-        $response = Http::get($url);
-
-        if ($response->successful()) {
-            $data = $response->json();
-
-            // ✅ Access the nested array
-            $recommendations = $data['recommendations'] ?? [];
-            $productIds = collect($recommendations)->pluck('id');
-
-            $products = Product::whereIn('id', $productIds)->get();
-
-            return ProductResource::collection($products);
-        } else {
-            return response()->json(['error' => 'Failed to fetch recommendations'], 500);
-        }
+        return $this->recommendedProducts('/recommend_content/' . rawurlencode($productID));
     }
 
     public function getRecommendations_collaborative($UserID)
     {
-        $url = "http://127.0.0.1:5000/recommend_users/" . rawurlencode($UserID);
-
-        $response = Http::get($url);
-
-        if ($response->successful()) {
-            $data = $response->json();
-
-            // ✅ Access the nested array
-            $recommendations = $data['recommendations'] ?? [];
-            $productIds = collect($recommendations)->pluck('id');
-
-            $products = Product::whereIn('id', $productIds)->get();
-
-            return ProductResource::collection($products);
-        } else {
-            return response()->json(['error' => 'Failed to fetch recommendations'], 500);
-        }
+        return $this->recommendedProducts('/recommend_users/' . rawurlencode($UserID));
     }
 
     public function getRecommendations_popularity()
     {
-        $url = "http://127.0.0.1:5000/recommend_popular";
-        $response = Http::get($url);
+        return $this->recommendedProducts('/recommend_popular');
+    }
 
-        if ($response->successful()) {
-            $data = $response->json();
+    /**
+     * Calls the recommender service and returns the products in the order it ranked them.
+     * whereIn() alone would return them in database order and lose the ranking.
+     */
+    private function recommendedProducts(string $path)
+    {
+        $response = Http::get(self::RECOMMENDER_URL . $path);
 
-            // ✅ Access the nested array
-            $recommendations = $data['recommendations'] ?? [];
-            $productIds = collect($recommendations)->pluck('id');
-
-            $products = Product::whereIn('id', $productIds)->get();
-
-            return ProductResource::collection($products);
-        } else {
+        if (!$response->successful()) {
             return response()->json(['error' => 'Failed to fetch recommendations'], 500);
         }
+
+        $productIds = collect($response->json('recommendations') ?? [])->pluck('id')->values();
+        $position = $productIds->flip(); // id => rank
+
+        $products = Product::whereIn('id', $productIds)->get()
+            ->sortBy(fn ($product) => $position[$product->id])
+            ->values();
+
+        return ProductResource::collection($products);
     }
 }
