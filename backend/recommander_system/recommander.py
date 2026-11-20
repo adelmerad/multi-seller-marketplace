@@ -5,6 +5,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.cluster import KMeans
 from flask import Flask, request, jsonify
 from kneed import KneeLocator
+import os
 import requests
 import time
 import threading
@@ -12,9 +13,33 @@ import threading
 
 app = Flask(__name__)
 
+
+def read_export_secret():
+    """EXPORT_SECRET from the environment, or from the Laravel .env next to this folder.
+
+    The secret must never be written in the code: it is shared with Laravel's
+    /api/export-recommendation-data route.
+    """
+    secret = os.environ.get("EXPORT_SECRET")
+    if secret:
+        return secret
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+    try:
+        with open(env_path, encoding="utf-8") as env_file:
+            for line in env_file:
+                if line.startswith("EXPORT_SECRET="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except FileNotFoundError:
+        pass
+    return None
+
+
+EXPORT_SECRET = read_export_secret()
+
+
 def trigger_export():
     url = "http://127.0.0.1:8000/api/export-recommendation-data"
-    headers = {"X-Secret-Key": "export_data"}
+    headers = {"X-Secret-Key": EXPORT_SECRET}
     try:
         response = requests.get(url, headers=headers)
         print(f"Triggered at {time.ctime()}: {response.json()}")
@@ -26,7 +51,10 @@ def periodic_trigger():
         trigger_export()
         time.sleep(60)
 
-threading.Thread(target=periodic_trigger, daemon=True).start()
+if EXPORT_SECRET:
+    threading.Thread(target=periodic_trigger, daemon=True).start()
+else:
+    print("EXPORT_SECRET is not set: the periodic data export is disabled.")
 
 ### ---------- CONTENT-BASED ---------- ###
 
